@@ -54,7 +54,7 @@ module.exports = {
 	},
 	// Default log level for built-in console logger. It can be overwritten in logger options above.
 	// Available values: trace, debug, info, warn, error, fatal
-	logLevel: "warn",
+	logLevel: "info",
 
 	// Define transporter.
 	// More info: https://moleculer.services/docs/0.14/networking.html
@@ -174,7 +174,7 @@ module.exports = {
 
 	// Enable built-in tracing function. More info: https://moleculer.services/docs/0.14/tracing.html
 	tracing: {
-		enabled: true,
+		enabled: false,
 		// Available built-in exporters: "Console", "Datadog", "Event", "EventLegacy", "Jaeger", "Zipkin"
 		exporter: {
 			type: "Console", // Console exporter is only for development!
