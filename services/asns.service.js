@@ -5,6 +5,7 @@ const ConfigLoader = require("config-mixin");
 const { MoleculerClientError, MoleculerServerError } = require("moleculer").Errors;
 
 const whoiser = require('whoiser');
+const { Context } = require("moleculer");
 
 const ASN = {
     ASNumber: '11120',
@@ -124,6 +125,15 @@ module.exports = {
                 required: true,
             },
 
+            // networks
+            networks: {
+                type: "array",
+                required: false,
+                default: [],
+                populate: {
+                    action: "v1.noc.networks.resolve",
+                }
+            },
 
             ...DbService.FIELDS,// inject dbservice fields
         },
@@ -168,12 +178,78 @@ module.exports = {
             },
             async handler(ctx) {
                 // get asn
-                const asn = await this.lookup(ctx.params.number);
+                const asn = await this.lookup(ctx, ctx.params.number);
 
                 // return asn
                 return asn;
             }
-        }
+        },
+
+        /**
+         * add network to ASN
+         * 
+         * @actions
+         * @param {String} id - ASN id
+         * @param {String} network - network id
+         * 
+         * @returns {Object} ASN
+         */
+        addNetwork: {
+            rest: {
+                method: "POST",
+                path: "/:id/networks/:network",
+            },
+            params: {
+                id: {
+                    type: "string",
+                    optional: false,
+                },
+                network: {
+                    type: "string",
+                    optional: false,
+                },
+            },
+            async handler(ctx) {
+                // update asn
+                const asn = await this.addNetwork(ctx, ctx.params.id, ctx.params.network);
+
+                // return asn
+                return asn;
+            }
+        },
+
+        /**
+         * remove network from ASN
+         * 
+         * @actions
+         * @param {String} id - ASN id
+         * @param {String} network - network id
+         * 
+         * @returns {Object} ASN
+         */
+        removeNetwork: {
+            rest: {
+                method: "DELETE",
+                path: "/:id/networks/:network",
+            },
+            params: {
+                id: {
+                    type: "string",
+                    optional: false,
+                },
+                network: {
+                    type: "string",
+                    optional: false,
+                },
+            },
+            async handler(ctx) {
+                // update asn
+                const asn = await this.removeNetwork(ctx, ctx.params.id, ctx.params.network);
+
+                // return asn
+                return asn;
+            }
+        },
     },
 
     /**
@@ -210,11 +286,12 @@ module.exports = {
          * lookup ASN by number from whois server
          * if found create new ASN entity
          * 
+         * @param {Context} ctx - context
          * @param {Number} number - ASN number
          * 
          * @returns {Object} ASN
          */
-        async lookup(number) {
+        async lookup(ctx, number) {
             // look in db
             let asn = await this.getASN(number);
 
@@ -224,20 +301,86 @@ module.exports = {
             }
 
             // lookup asn
-            asn = await whoiser(number);
+            const lookup = await ctx.call('v1.utils.network.asn', {
+                asn: `AS${number}`
+            })
 
-            // if not found test data
-            if (!asn.ASNumber) {
-                return null;
+            // check for "as-block"
+            if (lookup['as-block']) {
+                // get block
+                const blockLow = parseInt(lookup['as-block'].split(' - ')[0].replace('AS', ''));
+                const blockHigh = parseInt(lookup['as-block'].split(' - ')[1].replace('AS', ''));
+                // loop through block
+                for (let i = blockLow; i <= blockHigh; i++) {
+                    const number = i;
+                    const found = await this.getASN(number);
+
+                    // if not found
+                    if (!found) {
+                        asn = await this.createEntity(null, {
+                            number: number,
+                            name: lookup.descr,
+                            description: lookup.descr,
+                            organization: lookup.org,
+                        });
+                    }
+                }
+            } else {
+                // create asn
+                asn = await this.createEntity(null, {
+                    number: lookup.ASNumber,
+                    name: lookup.ASName,
+                    description: lookup.ASName,
+                    organization: lookup.$addToSet,
+                });
             }
 
-            // create asn
-            asn = await this.createEntity(null, {
-                number: asn.ASNumber,
-                name: asn.ASName,
-                description: asn.ASName,
-                organization: asn.organisation.OrgName,
-            });
+
+            this.logger.info(`created asn ${asn.number} ${asn.name} ${asn.organization}`)
+
+            // return asn
+            return asn;
+        },
+
+        /**
+         * add network to ASN
+         * 
+         * @param {Context} ctx - context
+         * @param {String} id - ASN id
+         * @param {String} networkId - network id
+         * 
+         * @returns {Object} ASN
+         */
+        async addNetwork(ctx, id, networkId) {
+            // update asn
+            const asn = await this.updateEntity(ctx, {
+                id: id,
+                $addToSet: {
+                    networks: networkId,
+                }
+            }, { raw: true });
+
+            // return asn
+            return asn;
+        },
+
+        /**
+         * remove network from ASN
+         * 
+         * @param {Context} ctx - context
+         * @param {String} id - ASN id
+         * @param {String} networkId - network id
+         * 
+         * @returns {Object} ASN
+         */
+        async removeNetwork(ctx, id, networkId) {
+            // update asn
+            const asn = await this.updateEntity(ctx, {
+                id: id,
+                $pull: {
+                    networks: networkId,
+                }
+            }, { raw: true });
 
             // return asn
             return asn;

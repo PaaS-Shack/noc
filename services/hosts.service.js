@@ -46,6 +46,35 @@ module.exports = {
 
         fields: {
 
+            // ip address
+            ip: {
+                type: "string",
+                required: true,
+            },
+
+            // hostname
+            hostname: {
+                type: "string",
+                required: false
+            },
+
+            // ASN 
+            asn: {
+                type: "string",
+                required: false,
+                populate:{
+                    action:"v1.noc.asns.get",
+                }
+            },
+
+            // network
+            network: {
+                type: "string",
+                required: false,
+                populate:{
+                    action:"v1.noc.networks.get",
+                }
+            },
 
 
             ...DbService.FIELDS,// inject dbservice fields
